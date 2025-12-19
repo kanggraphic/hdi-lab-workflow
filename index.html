@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HDI Lab 아카이빙 프로젝트 워크플로우 관리 시스템</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        
+        .process-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .process-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .progress-ring {
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        .task-row {
+            transition: all 0.2s ease;
+        }
+        
+        .task-row:hover {
+            background-color: #f9fafb;
+        }
+        
+        .gantt-bar {
+            transition: all 0.3s ease;
+        }
+        
+        .gantt-bar:hover {
+            opacity: 0.8;
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(8px);
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .phase-connector {
+            position: relative;
+        }
+
+        .phase-connector::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: -24px;
+            width: 24px;
+            height: 2px;
+            background: #e5e7eb;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // 실제 HDI Lab 프로젝트 데이터 구조
+        const projectData = {
+            title: "HDI Lab 아카이빙 프로젝트",
+            teams: [
+                {
+                    name: "산업디자인",
+                    members: [
+                        { name: "홍지수", role: "팀장" },
+                        { name: "조성환", role: "팀원" },
+                        { name: "배진형", role: "팀원" },
+                        { name: "신성렬", role: "팀원" }
+                    ]
+                },
+                {
+                    name: "시각디자인",
+                    members: [
+                        { name: "강동구", role: "팀장" },
+                        { name: "임정민", role: "팀원" },
+                        { name: "이유안", role: "팀원" },
+                        { name: "한수민", role: "팀원" }
+                    ]
+                }
+            ],
+            phases: [
+                {
+                    id: "001",
+                    title: "KICK OFF",
+                    color: "indigo",
+                    description: "프로젝트 시작 및 계획 수립",
+                    tasks: [
+                        { id: "001-1", name: "프로젝트 목표 정의", assignee: "홍지수", completed: true },
+                        { id: "001-2", name: "연구 범위 설정", assignee: "강동구", completed: true },
+                        { id: "001-3", name: "일정 계획 수립", assignee: "홍지수", completed: true }
+                    ]
+                },
+                {
+                    id: "002",
+                    title: "평가대상 연구",
+                    color: "blue",
+                    description: "평가 대상 품목 정의 및 데이터 수집",
+                    tasks: [
+                        { id: "002-1", name: "품목 정의 및 범위 설정", assignee: "홍지수", completed: true },
+                        { id: "002-2", name: "평가 대상 품목 연구", assignee: "조성환", completed: true },
+                        { id: "002-3", name: "품목 데이터 수집 방법 연구", assignee: "배진형", completed: true },
+                        { id: "002-4", name: "텍스트/이미지 데이터 수집 양식 설정", assignee: "강동구", completed: false },
+                        { id: "002-5", name: "텍스트/이미지 데이터 수집 테스트", assignee: "임정민", completed: false },
+                        { id: "002-6", name: "데이터 수집 프로세스 사전 검토", assignee: "이유안", completed: false },
+                        { id: "002-7", name: "자동 수집 방식(CS 담당)", assignee: "한수민", completed: false },
+                        { id: "002-8", name: "수작업 수집 방식(연구원 담당)", assignee: "조성환", completed: false },
+                        { id: "002-9", name: "데이터 수집 중간 검토", assignee: "배진형", completed: false },
+                        { id: "002-10", name: "텍스트/이미지 데이터 검토", assignee: "신성렬", completed: false },
+                        { id: "002-11", name: "텍스트/이미지 데이터 가공", assignee: "강동구", completed: false },
+                        { id: "002-12", name: "최종 데이터 보완 완료", assignee: "임정민", completed: false },
+                        { id: "002-13", name: "데이터 업로드 및 결과", assignee: "이유안", completed: false },
+                        { id: "002-14", name: "데이터 업로드 후 검토", assignee: "한수민", completed: false }
+                    ]
+                },
+                {
+                    id: "003",
+                    title: "평가지표 연구",
+                    color: "purple",
+                    description: "평가 문항 개발 및 검증",
+                    tasks: [
+                        { id: "003-1", name: "국내외 평가지표 관련 논문 수집", assignee: "홍지수", completed: false },
+                        { id: "003-2", name: "선행 연구별 핵심 평가항목 분류", assignee: "조성환", completed: false },
+                        { id: "003-3", name: "중첩 개념 통합", assignee: "배진형", completed: false },
+                        { id: "003-4", name: "Reflective / Formative 문항 분류", assignee: "신성렬", completed: false },
+                        { id: "003-5", name: "종속변수 문항 추출", assignee: "강동구", completed: false },
+                        { id: "003-6", name: "문항표 초기 구성", assignee: "임정민", completed: false },
+                        { id: "003-7", name: "인터뷰 가이드 작성", assignee: "이유안", completed: false },
+                        { id: "003-8", name: "전문가 리크루팅 및 자문 요청문 작성", assignee: "한수민", completed: false },
+                        { id: "003-9", name: "인터뷰 모더레이팅 준비", assignee: "홍지수", completed: false },
+                        { id: "003-10", name: "인터뷰 실시", assignee: "조성환", completed: false },
+                        { id: "003-11", name: "설문조사 설계", assignee: "배진형", completed: false },
+                        { id: "003-12", name: "설문조사 실시", assignee: "신성렬", completed: false },
+                        { id: "003-13", name: "설문조사 요인분석", assignee: "강동구", completed: false },
+                        { id: "003-14", name: "평가 문항 초안 확정", assignee: "임정민", completed: false },
+                        { id: "003-15", name: "파일럿 테스트 기획", assignee: "이유안", completed: false },
+                        { id: "003-16", name: "파일럿 평가 데이터 준비", assignee: "한수민", completed: false },
+                        { id: "003-17", name: "파일럿 평가 실행", assignee: "홍지수", completed: false },
+                        { id: "003-18", name: "평가 문항 확정", assignee: "조성환", completed: false },
+                        { id: "003-19", name: "본 평가 이후 통계 데이터 취합", assignee: "배진형", completed: false },
+                        { id: "003-20", name: "최종 요인분석", assignee: "신성렬", completed: false },
+                        { id: "003-21", name: "최종 문항 확정 및 가중치 도출", assignee: "강동구", completed: false }
+                    ]
+                },
+                {
+                    id: "004",
+                    title: "평가페이지 개발",
+                    color: "green",
+                    description: "제품/시각 디자인 평가 시스템 구축",
+                    tasks: [
+                        { id: "004-1", name: "평가 시스템 기획", assignee: "임정민", completed: false },
+                        { id: "004-2", name: "UI/UX 설계", assignee: "이유안", completed: false },
+                        { id: "004-3", name: "프론트엔드 개발", assignee: "한수민", completed: false },
+                        { id: "004-4", name: "백엔드 개발", assignee: "홍지수", completed: false },
+                        { id: "004-5", name: "데이터베이스 구축", assignee: "조성환", completed: false },
+                        { id: "004-6", name: "시스템 통합 테스트", assignee: "배진형", completed: false }
+                    ]
+                },
+                {
+                    id: "005",
+                    title: "평가 실행",
+                    color: "yellow",
+                    description: "전문가 평가 진행 및 관리",
+                    tasks: [
+                        { id: "005-1", name: "전문가 풀 확보 및 참여 의사 확인", assignee: "신성렬", completed: false },
+                        { id: "005-2", name: "참여 명단 취합 및 컨택", assignee: "강동구", completed: false },
+                        { id: "005-3", name: "연락처 및 메일 주소 확보", assignee: "임정민", completed: false },
+                        { id: "005-4", name: "최종 참여 확정 및 인적사항 수집", assignee: "이유안", completed: false },
+                        { id: "005-5", name: "평가 가이드 배포 및 평가 시작", assignee: "한수민", completed: false },
+                        { id: "005-6", name: "평가자 정보 계정 등록", assignee: "홍지수", completed: false },
+                        { id: "005-7", name: "행정 서류 양식 준비", assignee: "조성환", completed: false },
+                        { id: "005-8", name: "시작 안내 및 링크 배포", assignee: "배진형", completed: false },
+                        { id: "005-9", name: "진행 모니터링 및 이슈 대응", assignee: "신성렬", completed: false },
+                        { id: "005-10", name: "진척률 상시 모니터링", assignee: "강동구", completed: false },
+                        { id: "005-11", name: "시스템 오류 및 문의 즉각 대응", assignee: "임정민", completed: false },
+                        { id: "005-12", name: "중간 점검 및 리마인드", assignee: "이유안", completed: false },
+                        { id: "005-13", name: "평가 검수 및 최종 완료", assignee: "한수민", completed: false },
+                        { id: "005-14", name: "가중치 평가 및 제출 확인", assignee: "홍지수", completed: false },
+                        { id: "005-15", name: "참여 독려 및 마감", assignee: "조성환", completed: false },
+                        { id: "005-16", name: "정성평가 검수", assignee: "배진형", completed: false },
+                        { id: "005-17", name: "자문료 행정처리 및 취합", assignee: "신성렬", completed: false },
+                        { id: "005-18", name: "필수 증빙 서류 안내 및 요청", assignee: "강동구", completed: false },
+                        { id: "005-19", name: "행정 담당자에게 전달", assignee: "임정민", completed: false },
+                        { id: "005-20", name: "반려 건 대응 및 보완", assignee: "이유안", completed: false },
+                        { id: "005-21", name: "최종 지급 모니터링", assignee: "한수민", completed: false },
+                        { id: "005-22", name: "승인 절차 및 진행 모니터링", assignee: "홍지수", completed: false },
+                        { id: "005-23", name: "지연 안내 및 지급 일정 공유", assignee: "조성환", completed: false },
+                        { id: "005-24", name: "지급 완료 확인 및 DB 업데이트", assignee: "배진형", completed: false }
+                    ]
+                },
+                {
+                    id: "006",
+                    title: "보고서 작성",
+                    color: "red",
+                    description: "데이터 정리 및 최종 보고서 작성",
+                    tasks: [
+                        { id: "006-1", name: "평가 데이터 정리/합본 제작", assignee: "신성렬", completed: false },
+                        { id: "006-2", name: "라벨링 어노테이션 포맷 정리", assignee: "강동구", completed: false },
+                        { id: "006-3", name: "가이드라인 작성", assignee: "임정민", completed: false },
+                        { id: "006-4", name: "연차보고서 작성", assignee: "이유안", completed: false },
+                        { id: "006-5", name: "최종 전달", assignee: "한수민", completed: false }
+                    ]
+                }
+            ]
+        };
+
+        const colorSchemes = {
+            indigo: { 
+                light: 'bg-indigo-50', 
+                medium: 'bg-indigo-100', 
+                dark: 'bg-indigo-600', 
+                text: 'text-indigo-700',
+                border: 'border-indigo-300',
+                ring: 'ring-indigo-500'
+            },
+            blue: { 
+                light: 'bg-blue-50', 
+                medium: 'bg-blue-100', 
+                dark: 'bg-blue-600', 
+                text: 'text-blue-700',
+                border: 'border-blue-300',
+                ring: 'ring-blue-500'
+            },
+            purple: { 
+                light: 'bg-purple-50', 
+                medium: 'bg-purple-100', 
+                dark: 'bg-purple-600', 
+                text: 'text-purple-700',
+                border: 'border-purple-300',
+                ring: 'ring-purple-500'
+            },
+            green: { 
+                light: 'bg-green-50', 
+                medium: 'bg-green-100', 
+                dark: 'bg-green-600', 
+                text: 'text-green-700',
+                border: 'border-green-300',
+                ring: 'ring-green-500'
+            },
+            yellow: { 
+                light: 'bg-yellow-50', 
+                medium: 'bg-yellow-100', 
+                dark: 'bg-yellow-600', 
+                text: 'text-yellow-700',
+                border: 'border-yellow-300',
+                ring: 'ring-yellow-500'
+            },
+            red: { 
+                light: 'bg-red-50', 
+                medium: 'bg-red-100', 
+                dark: 'bg-red-600', 
+                text: 'text-red-700',
+                border: 'border-red-300',
+                ring: 'ring-red-500'
+            }
+        };
+
+        function App() {
+            const [phases, setPhases] = useState(projectData.phases);
+            const [selectedPhase, setSelectedPhase] = useState(null);
+            const [viewMode, setViewMode] = useState('cards'); // 'cards', 'gantt', 'team'
+            const [filterAssignee, setFilterAssignee] = useState('all');
+            const [searchQuery, setSearchQuery] = useState('');
+
+            // Load data from storage
+            useEffect(() => {
+                const loadData = async () => {
+                    try {
+                        const result = await window.storage.get('hdi-lab-project-v2');
+                        if (result && result.value) {
+                            setPhases(JSON.parse(result.value));
+                        }
+                    } catch (error) {
+                        console.log('No saved data, using initial data');
+                    }
+                };
+                loadData();
+            }, []);
+
+            // Save data to storage
+            useEffect(() => {
+                const saveData = async () => {
+                    try {
+                        await window.storage.set('hdi-lab-project-v2', JSON.stringify(phases));
+                    } catch (error) {
+                        console.error('Failed to save:', error);
+                    }
+                };
+                saveData();
+            }, [phases]);
+
+            const toggleTask = (phaseId, taskId) => {
+                setPhases(prev => prev.map(phase => {
+                    if (phase.id === phaseId) {
+                        return {
+                            ...phase,
+                            tasks: phase.tasks.map(task =>
+                                task.id === taskId ? { ...task, completed: !task.completed } : task
+                            )
+                        };
+                    }
+                    return phase;
+                }));
+            };
+
+            const updateAssignee = (phaseId, taskId, newAssignee) => {
+                setPhases(prev => prev.map(phase => {
+                    if (phase.id === phaseId) {
+                        return {
+                            ...phase,
+                            tasks: phase.tasks.map(task =>
+                                task.id === taskId ? { ...task, assignee: newAssignee } : task
+                            )
+                        };
+                    }
+                    return phase;
+                }));
+            };
+
+            const calculateProgress = (tasks) => {
+                const completed = tasks.filter(t => t.completed).length;
+                return Math.round((completed / tasks.length) * 100);
+            };
+
+            // Statistics
+            const stats = useMemo(() => {
+                const allTasks = phases.flatMap(p => p.tasks);
+                const completedTasks = allTasks.filter(t => t.completed).length;
+                const inProgressPhases = phases.filter(p => {
+                    const progress = calculateProgress(p.tasks);
+                    return progress > 0 && progress < 100;
+                }).length;
+                const completedPhases = phases.filter(p => calculateProgress(p.tasks) === 100).length;
+
+                return {
+                    totalTasks: allTasks.length,
+                    completedTasks,
+                    inProgressPhases,
+                    completedPhases,
+                    overallProgress: Math.round((completedTasks / allTasks.length) * 100)
+                };
+            }, [phases]);
+
+            // Get all team members
+            const allMembers = useMemo(() => {
+                const members = projectData.teams.flatMap(team => 
+                    team.members.map(m => ({ ...m, team: team.name }))
+                );
+                return members;
+            }, []);
+
+            // Filtered phases
+            const filteredPhases = useMemo(() => {
+                return phases.map(phase => {
+                    let filteredTasks = phase.tasks;
+
+                    if (filterAssignee !== 'all') {
+                        filteredTasks = filteredTasks.filter(t => t.assignee === filterAssignee);
+                    }
+
+                    if (searchQuery) {
+                        const query = searchQuery.toLowerCase();
+                        filteredTasks = filteredTasks.filter(t =>
+                            t.name.toLowerCase().includes(query) ||
+                            t.assignee.toLowerCase().includes(query)
+                        );
+                    }
+
+                    return { ...phase, tasks: filteredTasks };
+                }).filter(phase => phase.tasks.length > 0);
+            }, [phases, filterAssignee, searchQuery]);
+
+            return (
+                <div className="min-h-screen pb-12">
+                    {/* Header */}
+                    <div className="bg-white shadow-lg border-b-2 border-indigo-500 sticky top-0 z-30">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                                        {projectData.title}
+                                    </h1>
+                                    <p className="text-gray-600">워크플로우 통합 관리 시스템</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-5xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                                        {stats.overallProgress}%
+                                    </div>
+                                    <div className="text-sm text-gray-500 mt-1">전체 진행률</div>
+                                </div>
+                            </div>
+
+                            {/* Statistics Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4 border-2 border-indigo-200">
+                                    <div className="text-sm font-semibold text-indigo-700 mb-1">전체 프로세스</div>
+                                    <div className="text-3xl font-bold text-indigo-900">{phases.length}</div>
+                                    <div className="text-xs text-indigo-600 mt-1">{stats.completedPhases}개 완료</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border-2 border-green-200">
+                                    <div className="text-sm font-semibold text-green-700 mb-1">완료된 작업</div>
+                                    <div className="text-3xl font-bold text-green-900">{stats.completedTasks}</div>
+                                    <div className="text-xs text-green-600 mt-1">/ {stats.totalTasks}개</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border-2 border-yellow-200">
+                                    <div className="text-sm font-semibold text-yellow-700 mb-1">진행 중</div>
+                                    <div className="text-3xl font-bold text-yellow-900">{stats.inProgressPhases}</div>
+                                    <div className="text-xs text-yellow-600 mt-1">프로세스</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border-2 border-purple-200">
+                                    <div className="text-sm font-semibold text-purple-700 mb-1">남은 작업</div>
+                                    <div className="text-3xl font-bold text-purple-900">{stats.totalTasks - stats.completedTasks}</div>
+                                    <div className="text-xs text-purple-600 mt-1">개</div>
+                                </div>
+                            </div>
+
+                            {/* Controls */}
+                            <div className="flex flex-col lg:flex-row gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="작업 또는 담당자 검색..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                                <select
+                                    value={filterAssignee}
+                                    onChange={(e) => setFilterAssignee(e.target.value)}
+                                    className="px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    <option value="all">전체 담당자</option>
+                                    {allMembers.map(member => (
+                                        <option key={member.name} value={member.name}>
+                                            {member.name} ({member.team})
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setViewMode('cards')}
+                                        className={`px-4 py-2.5 rounded-lg font-semibold transition ${
+                                            viewMode === 'cards'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        카드뷰
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('gantt')}
+                                        className={`px-4 py-2.5 rounded-lg font-semibold transition ${
+                                            viewMode === 'gantt'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        간트차트
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('team')}
+                                        className={`px-4 py-2.5 rounded-lg font-semibold transition ${
+                                            viewMode === 'team'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        팀뷰
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {viewMode === 'cards' && (
+                            <CardsView 
+                                phases={filteredPhases}
+                                calculateProgress={calculateProgress}
+                                setSelectedPhase={setSelectedPhase}
+                                toggleTask={toggleTask}
+                                colorSchemes={colorSchemes}
+                            />
+                        )}
+                        
+                        {viewMode === 'gantt' && (
+                            <GanttView 
+                                phases={filteredPhases}
+                                calculateProgress={calculateProgress}
+                                colorSchemes={colorSchemes}
+                            />
+                        )}
+
+                        {viewMode === 'team' && (
+                            <TeamView 
+                                teams={projectData.teams}
+                                phases={phases}
+                                colorSchemes={colorSchemes}
+                            />
+                        )}
+                    </div>
+
+                    {/* Detail Modal */}
+                    {selectedPhase && (
+                        <PhaseDetailModal
+                            phase={selectedPhase}
+                            onClose={() => setSelectedPhase(null)}
+                            toggleTask={toggleTask}
+                            updateAssignee={updateAssignee}
+                            calculateProgress={calculateProgress}
+                            colorSchemes={colorSchemes}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // Cards View Component
+        function CardsView({ phases, calculateProgress, setSelectedPhase, toggleTask, colorSchemes }) {
+            return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {phases.map((phase, index) => {
+                        const progress = calculateProgress(phase.tasks);
+                        const colors = colorSchemes[phase.color];
+                        
+                        return (
+                            <div
+                                key={phase.id}
+                                className="process-card bg-white rounded-2xl shadow-lg overflow-hidden cursor-pointer border-2 border-gray-100 hover:border-indigo-300"
+                                onClick={() => setSelectedPhase(phase)}
+                            >
+                                <div className={`${colors.medium} px-6 py-5 border-b-4 ${colors.border}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className={`text-sm font-bold ${colors.text} uppercase tracking-wider`}>
+                                            {phase.id}
+                                        </span>
+                                        <div className="relative w-16 h-16">
+                                            <svg className="transform -rotate-90 w-16 h-16">
+                                                <circle
+                                                    cx="32"
+                                                    cy="32"
+                                                    r="28"
+                                                    stroke="currentColor"
+                                                    strokeWidth="8"
+                                                    fill="transparent"
+                                                    className="text-gray-200"
+                                                />
+                                                <circle
+                                                    cx="32"
+                                                    cy="32"
+                                                    r="28"
+                                                    stroke="currentColor"
+                                                    strokeWidth="8"
+                                                    fill="transparent"
+                                                    strokeDasharray={`${2 * Math.PI * 28}`}
+                                                    strokeDashoffset={`${2 * Math.PI * 28 * (1 - progress / 100)}`}
+                                                    className={`progress-ring ${colors.text.replace('text', 'text')}`}
+                                                    strokeLinecap="round"
+                                                />
+                                            </svg>
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <span className={`text-sm font-bold ${colors.text}`}>{progress}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900 mb-2">{phase.title}</h3>
+                                    <p className="text-sm text-gray-600">{phase.description}</p>
+                                </div>
+
+                                <div className="px-6 py-5">
+                                    <div className="mb-4">
+                                        <div className="flex justify-between text-sm text-gray-600 mb-2">
+                                            <span>작업 진행</span>
+                                            <span className="font-semibold">
+                                                {phase.tasks.filter(t => t.completed).length} / {phase.tasks.length}
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div
+                                                className={`h-3 rounded-full ${colors.dark} transition-all duration-500`}
+                                                style={{ width: `${progress}%` }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                            주요 작업
+                                        </div>
+                                        {phase.tasks.slice(0, 3).map(task => (
+                                            <div 
+                                                key={task.id} 
+                                                className="flex items-start gap-2 text-sm"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={task.completed}
+                                                    onChange={() => toggleTask(phase.id, task.id)}
+                                                    className="mt-0.5 w-4 h-4 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                                <span className={task.completed ? 'line-through text-gray-400' : 'text-gray-700'}>
+                                                    {task.name}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {phase.tasks.length > 3 && (
+                                            <div className="text-xs text-indigo-600 font-semibold pt-2">
+                                                +{phase.tasks.length - 3}개 더보기
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        }
+
+        // Gantt View Component
+        function GanttView({ phases, calculateProgress, colorSchemes }) {
+            return (
+                <div className="bg-white rounded-2xl shadow-lg p-6 overflow-x-auto">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-6">프로세스 타임라인</h2>
+                    
+                    <div className="space-y-4 min-w-[800px]">
+                        {phases.map((phase, index) => {
+                            const progress = calculateProgress(phase.tasks);
+                            const colors = colorSchemes[phase.color];
+                            
+                            return (
+                                <div key={phase.id} className="border-b border-gray-200 pb-4">
+                                    <div className="flex items-center mb-3">
+                                        <div className="w-48 flex-shrink-0">
+                                            <div className="font-bold text-gray-900">{phase.title}</div>
+                                            <div className="text-xs text-gray-500">{phase.id}</div>
+                                        </div>
+                                        <div className="flex-1 relative">
+                                            <div className="w-full bg-gray-100 rounded-full h-8 relative overflow-hidden">
+                                                <div
+                                                    className={`gantt-bar ${colors.dark} h-8 rounded-full flex items-center px-3 text-white text-sm font-semibold`}
+                                                    style={{ width: `${progress}%` }}
+                                                >
+                                                    {progress}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="w-32 flex-shrink-0 text-right">
+                                            <span className="text-sm font-semibold text-gray-600">
+                                                {phase.tasks.filter(t => t.completed).length} / {phase.tasks.length}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="ml-48 text-sm text-gray-600">
+                                        {phase.description}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        // Team View Component
+        function TeamView({ teams, phases, colorSchemes }) {
+            return (
+                <div className="space-y-6">
+                    {teams.map(team => {
+                        return (
+                            <div key={team.name} className="bg-white rounded-2xl shadow-lg p-6">
+                                <h2 className="text-2xl font-bold text-gray-900 mb-6">{team.name} 팀</h2>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {team.members.map(member => {
+                                        const memberTasks = phases.flatMap(p => 
+                                            p.tasks.filter(t => t.assignee === member.name).map(t => ({
+                                                ...t,
+                                                phase: p.title,
+                                                phaseColor: p.color
+                                            }))
+                                        );
+                                        const completedTasks = memberTasks.filter(t => t.completed).length;
+                                        const totalTasks = memberTasks.length;
+                                        const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+                                        return (
+                                            <div 
+                                                key={member.name}
+                                                className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-5 border-2 border-gray-200 hover:border-indigo-300 transition"
+                                            >
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                                                        <span className="text-xl font-bold text-indigo-600">
+                                                            {member.name[0]}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-gray-900">{member.name}</div>
+                                                        <div className="text-xs text-gray-500">{member.role}</div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="mb-3">
+                                                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                                        <span>작업 완료율</span>
+                                                        <span className="font-semibold">{progress}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                                        <div
+                                                            className="h-2 rounded-full bg-indigo-600 transition-all"
+                                                            style={{ width: `${progress}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-sm">
+                                                    <div className="text-gray-600 mb-2">
+                                                        총 {totalTasks}개 작업 중 {completedTasks}개 완료
+                                                    </div>
+                                                    {memberTasks.length > 0 && (
+                                                        <div className="space-y-1">
+                                                            {Array.from(new Set(memberTasks.map(t => t.phase))).map(phaseName => {
+                                                                const phaseTasks = memberTasks.filter(t => t.phase === phaseName);
+                                                                const phaseColor = phaseTasks[0].phaseColor;
+                                                                const colors = colorSchemes[phaseColor];
+                                                                
+                                                                return (
+                                                                    <div 
+                                                                        key={phaseName}
+                                                                        className={`text-xs ${colors.text} font-semibold`}
+                                                                    >
+                                                                        {phaseName}: {phaseTasks.length}개
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        }
+
+        // Phase Detail Modal Component
+        function PhaseDetailModal({ phase, onClose, toggleTask, updateAssignee, calculateProgress, colorSchemes }) {
+            const colors = colorSchemes[phase.color];
+            const progress = calculateProgress(phase.tasks);
+            const allMembers = projectData.teams.flatMap(t => t.members.map(m => m.name));
+
+            return (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center p-4 z-50"
+                    onClick={onClose}
+                >
+                    <div
+                        className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden slide-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className={`${colors.medium} px-8 py-6 border-b-4 ${colors.border}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <span className={`text-lg font-bold ${colors.text} uppercase tracking-wide`}>
+                                    {phase.id}
+                                </span>
+                                <button
+                                    onClick={onClose}
+                                    className="text-gray-600 hover:text-gray-900 text-3xl font-bold w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/50 transition"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            
+                            <h2 className="text-3xl font-bold text-gray-900 mb-3">{phase.title}</h2>
+                            <p className="text-gray-700 mb-6">{phase.description}</p>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-white rounded-xl p-4">
+                                    <div className="text-sm text-gray-600 mb-1">전체 진행률</div>
+                                    <div className={`text-4xl font-bold ${colors.text}`}>{progress}%</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-4">
+                                    <div className="text-sm text-gray-600 mb-1">완료된 작업</div>
+                                    <div className="text-4xl font-bold text-gray-900">
+                                        {phase.tasks.filter(t => t.completed).length}
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-xl p-4">
+                                    <div className="text-sm text-gray-600 mb-1">전체 작업</div>
+                                    <div className="text-4xl font-bold text-gray-900">
+                                        {phase.tasks.length}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-8 py-6 overflow-y-auto max-h-[calc(90vh-300px)]">
+                            <table className="w-full">
+                                <thead className="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-12">완료</th>
+                                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-24">작업 ID</th>
+                                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">작업명</th>
+                                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-48">담당자</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {phase.tasks.map(task => (
+                                        <tr 
+                                            key={task.id}
+                                            className="task-row border-b border-gray-100"
+                                        >
+                                            <td className="py-4 px-4">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={task.completed}
+                                                    onChange={() => toggleTask(phase.id, task.id)}
+                                                    className="w-5 h-5 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="text-sm font-mono text-gray-500">{task.id}</span>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                                    {task.name}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <select
+                                                    value={task.assignee}
+                                                    onChange={(e) => updateAssignee(phase.id, task.id, e.target.value)}
+                                                    className={`w-full px-3 py-2 border-2 ${colors.border} ${colors.light} ${colors.text} rounded-lg font-semibold text-sm focus:outline-none focus:ring-2 ${colors.ring}`}
+                                                >
+                                                    {allMembers.map(name => (
+                                                        <option key={name} value={name}>{name}</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
